@@ -1,6 +1,6 @@
-.git/*
-__pycache__/*
+.git/
+__pycache__/
 *.csv
 *.exe
 *.xlsx
-*.txt
+caldendar_id.txt
