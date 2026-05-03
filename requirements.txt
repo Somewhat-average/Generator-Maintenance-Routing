@@ -1,0 +1,7 @@
+beautiful_date==2.3.0
+gcsa==2.3.0
+imbox==0.9.8
+networkx==3.3
+numpy==2.4.4
+pandas==3.0.2
+Requests==2.33.1
