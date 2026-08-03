@@ -45,51 +45,9 @@ while True:
 if clear_screen:
     os.system('cls')
 
-while True:
-    start = input("Start route at:\n1. Work\n2. Home\nEnter your choice (1 or 2): ")
-    if start == "1":
-        start = "Work"
-        break
-    elif start == "2":
-        start = "Home"
-        break
-    else:
-        print("Invalid choice. Please enter '1' for Work or '2' for Home.")
-
-if clear_screen:
-    os.system('cls')
-
-while True:
-    end = input("End route at:\n1. Work\n2. Home\nEnter your choice (1 or 2): ")
-    if end == "1":
-        end = "Work"
-        break
-    elif end == "2":
-        end = "Home"
-        break
-    else:
-        print("Invalid choice. Please enter '1' for Work or '2' for Home.")
-
-split = None
-extra = None
-if start == end:
-    while True:
-        split = input("Split route (y/n)? ").strip().lower()
-        
-        if split == "y":
-            split = True
-            extra = "Work" if start == "Home" else "Home"
-            break  # Exit the loop once valid input is received
-        elif split == "n":
-            split = False
-            extra = None
-            break  # Exit the loop once valid input is received
-        else:
-            print("Please enter 'y' or 'n'.")
-
-
-if clear_screen:
-    os.system('cls')
+# Route always starts and ends at Home
+start = "Home"
+end = "Home"
 
 clients = pd.read_csv(clients_file)
 matrix = pd.read_csv(matrix_file, index_col="From/To")
@@ -284,11 +242,11 @@ def make_url(origin, end, addresses, latitude, longitude, length):
     formatted_addresses = [format_address(address) for address in addresses]
     return shorten_url(origin, end, formatted_addresses, latitude, longitude, length)
 
-def decode_url(origin, end, url, clients, selected_clients, latitude, longitude, length, return_link=False, split=False, extra=None):
+def decode_url(origin, end, url, clients, selected_clients, latitude, longitude, length, return_link=False):
     print()
     output = ''
 
-    # Extract addresses from URL and remove the first and last item ('Work')
+    # Extract addresses from URL and remove the first and last item (the Home start/end point)
     addresses = url.split('/')[6:-2]
     addresses = addresses[1:-1]  # remove first and last address
     shortened_url = shorten_url(origin, end, addresses, latitude, longitude, length)
@@ -299,32 +257,21 @@ def decode_url(origin, end, url, clients, selected_clients, latitude, longitude,
     for i in range(len(addresses)):
         addresses[i] = unformat_address(addresses[i])
 
-    index = 1
     for i, address in enumerate(addresses, 1):
         matched_clients = [client for _, client in clients.iterrows() if address in client['Address']]
-        
+
         if matched_clients:
             client = matched_clients[0]
-            
-            # Handle the split scenario
-            if split and extra is not None and client['Name'] == extra:
-                print(f"\n-- Splitting route at {extra} --\n")
-                output += f"\n-- Splitting route at {extra} --\n"
-                index = 1  # Reset the index after the split
-                continue  # Skip the rest of this loop and continue processing
-
             selected_clients[i-1] = client
-            print(f"{index}. {client['Name']} ({client['Plan']})")
-            output += f"{index}. {client['Name']} ({client['Plan']})\n"
-            index += 1
+            print(f"{i}. {client['Name']} ({client['Plan']})")
+            output += f"{i}. {client['Name']} ({client['Plan']})\n"
         else:
             print(f"{i}. Address not found in client list.")
             output += f"{i}. Address not found in client list.\n"
-            index += 1
 
     print(f"\nlink: {shortened_url}")
     output += f"\nlink: {shortened_url}"
-    
+
     return output
 
 
@@ -386,12 +333,6 @@ def main():
     selected_addresses.insert(0, start_address)
     selected_addresses.append(end_address)
 
-    if split:
-        extra_client = clients[clients['Name'] == extra]
-        extra_address = extra_client['Address'].iloc[0]
-        selected_clients.append(extra_client)
-        selected_addresses.insert(1, extra_address)
-
     # Generate submatrix for selected addresses
     sub_matrix = make_sub_matrix(matrix, selected_addresses)
 
@@ -434,10 +375,7 @@ def main():
     # print("Google Maps URL for TSP path:", google_maps_url)
     
     # Decode the URL to show the client details in the TSP order
-    decode_url(formatted_start_address, formatted_end_address, google_maps_url, clients, selected_clients, lat, lon, longest_distance, return_link=False, split=split, extra=extra)
-
-    if split:
-        print("Run again with clients from each leg for urls")
+    decode_url(formatted_start_address, formatted_end_address, google_maps_url, clients, selected_clients, lat, lon, longest_distance, return_link=False)
 
     # Calendar implementation
     verified_macs = [

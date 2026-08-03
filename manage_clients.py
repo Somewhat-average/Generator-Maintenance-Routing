@@ -5,8 +5,8 @@ from get_matrix import geocode_address, build_matrices
 
 CLIENTS_FILE = "generator_clients.csv"
 EDITABLE_FIELDS = ["Phone", "Address", "Plan", "Size", "Type", "Model", "Serial"]
-# Work/Home are used as fixed route start/end points elsewhere in the codebase.
-PROTECTED_NAMES = {"Work", "Home"}
+# Home is used as the fixed route start/end point elsewhere in the codebase.
+PROTECTED_NAMES = {"Home"}
 
 
 def load_clients():

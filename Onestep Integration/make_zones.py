@@ -4,8 +4,8 @@ import pandas as pd
 clients_file = "../generator_clients.csv"
 clients = pd.read_csv(clients_file)
 
-# remove home and work
-clients = clients.drop([0, 1])
+# Exclude the Home depot row (and Work, if it's still present) - these aren't generator clients
+clients = clients[~clients['Name'].isin(['Home', 'Work'])]
 
 # Open a file for writing
 with open("zones.csv", "w") as f:
