@@ -5,12 +5,14 @@ from math import isnan, sqrt, sin, cos, atan2, pi
 import os
 import inspect
 import uuid
+import numpy as np
 import pandas as pd
 from statistics import fmean
 from itertools import combinations
 from beautiful_date import *
 from gcsa.event import Event
 from gcsa.google_calendar import GoogleCalendar
+from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
 clients_file = "generator_clients.csv"
 
@@ -154,6 +156,56 @@ def solve_tsp_nearest_neighbor(sub_matrix):
         nearest = remaining.idxmin()
         path.append(nearest)
     path.append(end_address)  # Return to the starting point
+    return path
+
+
+# Solving TSP (open path, fixed start/end) with Google OR-Tools.
+# Handles asymmetric, non-metric cost matrices natively - no symmetry or
+# triangle-inequality assumption, unlike Christofides or plain 2-opt.
+def solve_tsp_ortools(sub_matrix, time_limit_seconds=10):
+    nodes = sub_matrix.index.tolist()
+    n = len(nodes)
+
+    # OR-Tools needs integer arc costs; scale to keep sub-unit precision.
+    scale = 1000
+    values = sub_matrix.to_numpy(dtype=float)
+    finite = values[np.isfinite(values)]
+    # Unreachable pairs (NaN from OSRM) get a heavy penalty instead of being
+    # treated as free/zero-cost, so the solver avoids them unless forced.
+    penalty = (finite.max() if finite.size else 1) * 1000
+    values = np.where(np.isnan(values), penalty, values)
+    np.fill_diagonal(values, 0)
+    cost_matrix = np.rint(values * scale).astype(int).tolist()
+
+    start_index, end_index = 0, n - 1
+    manager = pywrapcp.RoutingIndexManager(n, 1, [start_index], [end_index])
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return cost_matrix[from_node][to_node]
+
+    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
+    search_parameters.local_search_metaheuristic = (
+        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH)
+    search_parameters.time_limit.FromSeconds(time_limit_seconds)
+
+    solution = routing.SolveWithParameters(search_parameters)
+    if solution is None:
+        raise RuntimeError("OR-Tools failed to find a route for this stop list.")
+
+    path = []
+    index = routing.Start(0)
+    while not routing.IsEnd(index):
+        path.append(nodes[manager.IndexToNode(index)])
+        index = solution.Value(routing.NextVar(index))
+    path.append(nodes[manager.IndexToNode(index)])
     return path
 
 
@@ -312,7 +364,7 @@ def to_polar_vector(p, q):
     return (magnitude, direction)
 
 
-ALGORITHM = "two_opt" # Options: "two_opt", "nearest_neighbor", "christofides"
+ALGORITHM = "ortools" # Options: "ortools", "two_opt", "nearest_neighbor"
 
 
 def main():
@@ -343,10 +395,8 @@ def main():
     # Generate submatrix for selected addresses
     sub_matrix = make_sub_matrix(matrix, selected_addresses)
 
-    if ALGORITHM == "christofides":
-        from christofides import solve_tsp_christofides, create_graph
-        tsp_path = solve_tsp_christofides(sub_matrix)
-        tsp_path = two_opt(tsp_path, sub_matrix)  # Optimize with 2-opt
+    if ALGORITHM == "ortools":
+        tsp_path = solve_tsp_ortools(sub_matrix)
     elif ALGORITHM == "two_opt":
         tsp_path = solve_tsp_two_opt(sub_matrix)
     elif ALGORITHM == "nearest_neighbor":
