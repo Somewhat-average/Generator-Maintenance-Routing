@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 import manage_clients
+import get_matrix
 from gui.threading_utils import run_in_background
 from gui.client_dialog import ClientDialog
 
@@ -110,11 +111,19 @@ class ClientsTab(ttk.Frame):
         manage_clients.save_clients(self.fieldnames, self.rows)
         self._refresh_tree()
         self.status_label.configure(text="Updating distance/duration matrices...")
-        run_in_background(self, manage_clients.update_matrices, self._on_matrices_updated)
+        # Call build_matrices directly rather than manage_clients.update_matrices(), which
+        # swallows exceptions and only print()s them - invisible in the GUI, and the reason
+        # a stale/incomplete matrix could silently break route generation later.
+        run_in_background(self, get_matrix.build_matrices, self._on_matrices_updated,
+                           manage_clients.CLIENTS_FILE)
 
     def _on_matrices_updated(self, status, payload):
         if status == "error":
-            self.status_label.configure(text=f"Could not update matrices automatically: {payload}")
+            message = (f"Could not update the distance/duration matrices automatically "
+                       f"({payload}). Route generation may fail until this succeeds - "
+                       f"click Refresh once you're back online, or run get_matrix.py manually.")
+            self.status_label.configure(text=message)
+            messagebox.showwarning("Matrix update failed", message, parent=self)
         else:
             self.status_label.configure(text="")
         if self.on_clients_changed:

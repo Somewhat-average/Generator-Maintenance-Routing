@@ -30,18 +30,20 @@ class RouteTab(ttk.Frame):
         self.status_label = ttk.Label(self, text="", foreground="#555")
         self.status_label.pack(fill="x", pady=(4, 4))
 
-        # Scrollable frame of plan-tier checkboxes
+        # Scrollable frame of plan-tier checkboxes, one column per tier
         canvas_frame = ttk.Frame(self)
         canvas_frame.pack(fill="both", expand=True)
         canvas = tk.Canvas(canvas_frame, height=220, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        h_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=canvas.xview)
         self.checkbox_frame = ttk.Frame(canvas)
         self.checkbox_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self.checkbox_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        v_scrollbar.pack(side="right", fill="y")
+        h_scrollbar.pack(fill="x")
 
         self.generate_button = ttk.Button(self, text="Generate Route", command=self._on_generate)
         self.generate_button.pack(pady=(8, 0))
@@ -86,7 +88,7 @@ class RouteTab(ttk.Frame):
             if not tier_clients:
                 continue
             tier_frame = ttk.Labelframe(self.checkbox_frame, text=f"{plan} plan", padding=4)
-            tier_frame.pack(fill="x", pady=2, anchor="w")
+            tier_frame.pack(side="left", fill="y", padx=4, anchor="n")
             for client in tier_clients:
                 var = tk.BooleanVar(value=(plan == "Platinum"))
                 ttk.Checkbutton(tier_frame, text=client['Name'], variable=var).pack(anchor="w")

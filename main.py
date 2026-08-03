@@ -331,6 +331,13 @@ def build_route(clients, matrix, selected_clients, matrix_type="distance",
 
     full_addresses = [start_address] + selected_addresses + [end_address]
 
+    missing = [addr for addr in dict.fromkeys(full_addresses) if addr not in matrix.index]
+    if missing:
+        raise ValueError(
+            "The distance/duration matrix is missing these addresses, so a route can't be "
+            "built: " + "; ".join(missing) + ". Rebuild the matrices (edit or re-save any "
+            "client in Manage Clients, or run get_matrix.py) and try again.")
+
     sub_matrix = make_sub_matrix(matrix, full_addresses)
 
     if algorithm == "ortools":
