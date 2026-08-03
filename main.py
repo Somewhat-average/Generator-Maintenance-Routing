@@ -60,57 +60,6 @@ def calculate_total_distance(path, matrix):
     return total_distance
 
 
-def two_opt_swap(path, i, k):
-    new_path = path[0:i]
-    new_path.extend(reversed(path[i:k + 1]))
-    new_path.extend(path[k + 1:])
-    return new_path
-
-
-def two_opt(path, matrix):
-    improvement = True
-    while improvement:
-        improvement = False
-        best_distance = calculate_total_distance(path, matrix)
-        for i in range(1, len(path) - 2):
-            for k in range(i + 1, len(path) - 1):
-                new_path = two_opt_swap(path, i, k)
-                new_distance = calculate_total_distance(new_path, matrix)
-                if new_distance < best_distance:
-                    path = new_path
-                    best_distance = new_distance
-                    improvement = True
-    return path
-
-
-# Modify the solve_tsp function
-def solve_tsp_two_opt(sub_matrix):
-    # Create an initial path - could be Nearest Neighbor or any other method
-    start_address = sub_matrix.index[0]
-    end_address = sub_matrix.index[-1]
-    # print(f"{start_address=}, {end_address=}")
-    initial_path = [start_address] + sub_matrix.index[1:-1].tolist() + [end_address]
-
-    # Apply 2-opt to the initial path
-    optimized_path = two_opt(initial_path, sub_matrix)
-    return optimized_path
-
-
-# Solving TSP using Nearest Neighbor Algorithm
-def solve_tsp_nearest_neighbor(sub_matrix):
-    start_address = sub_matrix.index[0]
-    end_address = sub_matrix.index[-1]
-    path = [start_address]
-    while len(path) < len(sub_matrix.index):
-        last_visited = path[-1]
-        # Find the nearest neighbor
-        remaining = sub_matrix.loc[last_visited].drop(path)
-        nearest = remaining.idxmin()
-        path.append(nearest)
-    path.append(end_address)  # Return to the starting point
-    return path
-
-
 # Solving TSP (open path, fixed start/end) with Google OR-Tools.
 # Handles asymmetric, non-metric cost matrices natively - no symmetry or
 # triangle-inequality assumption, unlike Christofides or plain 2-opt.
@@ -299,8 +248,6 @@ def to_polar_vector(p, q):
     return (magnitude, direction)
 
 
-ALGORITHM = "two_opt" # Options: "ortools", "two_opt", "nearest_neighbor"
-
 WEEKDAY_OFFSETS = [MO, TU, WE, TH, FR, SA, SU]
 
 
@@ -318,7 +265,7 @@ def get_calendar(calendar_id):
 
 
 def build_route(clients, matrix, selected_clients, matrix_type="distance",
-                 algorithm=ALGORITHM, start_name=start, end_name=end):
+                 start_name=start, end_name=end):
     """Computes the TSP-optimized route for selected_clients. Returns a dict:
     tsp_path, ordered_clients, summary_text, google_maps_url, google_maps_short_link,
     eta_lower, eta_upper (the last two are None unless matrix_type == "distance")."""
@@ -339,15 +286,7 @@ def build_route(clients, matrix, selected_clients, matrix_type="distance",
             "client in Manage Clients, or run get_matrix.py) and try again.")
 
     sub_matrix = make_sub_matrix(matrix, full_addresses)
-
-    if algorithm == "ortools":
-        tsp_path = solve_tsp_ortools(sub_matrix)
-    elif algorithm == "two_opt":
-        tsp_path = solve_tsp_two_opt(sub_matrix)
-    elif algorithm == "nearest_neighbor":
-        tsp_path = solve_tsp_nearest_neighbor(sub_matrix)
-    else:
-        raise ValueError("Invalid algorithm selection")
+    tsp_path = solve_tsp_ortools(sub_matrix)
 
     eta_lower = eta_upper = None
     if matrix_type == "distance":

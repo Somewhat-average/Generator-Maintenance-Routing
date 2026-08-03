@@ -10,6 +10,10 @@ class App(tk.Tk):
         super().__init__()
         self.title("Generator Maintenance Routing")
         self.geometry("720x640")
+        try:
+            self.state('zoomed')  # start maximized (Windows)
+        except tk.TclError:
+            self.attributes('-zoomed', True)
 
         notebook = ttk.Notebook(self)
         self.clients_tab = ClientsTab(notebook, on_clients_changed=self._on_clients_changed)
