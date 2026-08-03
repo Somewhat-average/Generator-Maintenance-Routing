@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-clients_file = "../generator_clients.csv"
+clients_file = "../data/generator_clients.csv"
 clients = pd.read_csv(clients_file)
 
 # Exclude the Home depot row (and Work, if it's still present) - these aren't generator clients

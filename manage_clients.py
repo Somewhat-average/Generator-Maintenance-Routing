@@ -3,7 +3,8 @@ import os
 
 from get_matrix import geocode_address, build_matrices
 
-CLIENTS_FILE = "generator_clients.csv"
+DATA_DIR = "data"
+CLIENTS_FILE = os.path.join(DATA_DIR, "generator_clients.csv")
 EDITABLE_FIELDS = ["Phone", "Address", "Plan", "Size", "Type", "Model", "Serial"]
 # Home is used as the fixed route start/end point elsewhere in the codebase.
 PROTECTED_NAMES = {"Home"}
@@ -90,7 +91,7 @@ def geocode_with_feedback(address):
     return "", ""
 
 
-def update_matrices(output_dir='.'):
+def update_matrices(output_dir=DATA_DIR):
     print("Updating distance and duration matrices...")
     try:
         build_matrices(CLIENTS_FILE, output_dir=output_dir)

@@ -46,7 +46,7 @@ class ClientsTab(ttk.Frame):
             self.fieldnames = ["Name"] + manage_clients.EDITABLE_FIELDS + ["Latitude", "Longitude"]
             self.rows = []
             self.status_label.configure(
-                text="No generator_clients.csv found - add a client below to create one.")
+                text="No data/generator_clients.csv found - add a client below to create one.")
         self._refresh_tree()
 
     def _refresh_tree(self):
@@ -64,7 +64,7 @@ class ClientsTab(ttk.Frame):
     def _on_add(self):
         if not self.fieldnames:
             messagebox.showerror("No client file",
-                                  "Add a client isn't available until generator_clients.csv exists "
+                                  "Add a client isn't available until data/generator_clients.csv exists "
                                   "with a header row.", parent=self)
             return
         new_row = {field: "" for field in self.fieldnames}

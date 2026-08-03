@@ -3,6 +3,7 @@ import os
 import requests
 
 CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+DATA_DIR = "data"
 
 
 def geocode_address(address):
@@ -80,7 +81,8 @@ def write_matrix_to_csv(matrix, addresses, file_path):
         for address, row in zip(addresses, matrix):
             writer.writerow([address] + row)
 
-def build_matrices(input_file_path='generator_clients.csv', output_dir='.', timeout=15):
+def build_matrices(input_file_path=os.path.join(DATA_DIR, 'generator_clients.csv'),
+                    output_dir=DATA_DIR, timeout=15):
     """Geocode any missing coordinates, then rebuild distance_matrix.csv and duration_matrix.csv."""
     # Fill in any missing Latitude/Longitude by geocoding the Address
     fill_missing_coordinates(input_file_path)

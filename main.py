@@ -14,7 +14,8 @@ from gcsa.event import Event
 from gcsa.google_calendar import GoogleCalendar
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
-clients_file = "generator_clients.csv"
+DATA_DIR = "data"
+clients_file = os.path.join(DATA_DIR, "generator_clients.csv")
 
 username = os.getenv("USERNAME")
 clear_screen = True
@@ -33,7 +34,7 @@ def format_number(value):
         return value
 
 
-def get_calendar_id(path="calendar_id.txt"):
+def get_calendar_id(path=os.path.join(DATA_DIR, "calendar_id.txt")):
     with open(path) as file:
         return file.read().splitlines()[0]
 
@@ -42,7 +43,7 @@ def load_clients(path=clients_file):
     return pd.read_csv(path)
 
 
-def load_matrix(matrix_type, output_dir="."):
+def load_matrix(matrix_type, output_dir=DATA_DIR):
     matrix_file = "distance_matrix.csv" if matrix_type == "distance" else "duration_matrix.csv"
     return pd.read_csv(os.path.join(output_dir, matrix_file), index_col="From/To")
 
