@@ -364,7 +364,7 @@ def to_polar_vector(p, q):
     return (magnitude, direction)
 
 
-ALGORITHM = "ortools" # Options: "ortools", "two_opt", "nearest_neighbor"
+ALGORITHM = "two_opt" # Options: "ortools", "two_opt", "nearest_neighbor"
 
 
 def main():
