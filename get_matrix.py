@@ -1,5 +1,52 @@
 import csv
+import os
 import requests
+
+CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+
+
+def geocode_address(address):
+    """Look up (latitude, longitude) for a US address via the free Census geocoder."""
+    try:
+        response = requests.get(CENSUS_GEOCODER_URL, params={
+            "address": address,
+            "benchmark": "Public_AR_Current",
+            "format": "json",
+        }, timeout=10)
+        response.raise_for_status()
+        matches = response.json().get("result", {}).get("addressMatches", [])
+    except (requests.RequestException, ValueError):
+        return None
+    if not matches:
+        return None
+    coords = matches[0]["coordinates"]
+    return coords["y"], coords["x"]  # (latitude, longitude)
+
+
+def fill_missing_coordinates(file_path):
+    """Geocode any row missing Latitude/Longitude and write the results back to the CSV."""
+    with open(file_path, mode='r', encoding='utf-8', newline='') as file:
+        reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+
+    updated = False
+    for row in rows:
+        if row.get('Address') and not (row.get('Latitude') and row.get('Longitude')):
+            result = geocode_address(row['Address'])
+            if result:
+                row['Latitude'], row['Longitude'] = result
+                updated = True
+                print(f"Geocoded {row['Name']}: {result[0]}, {result[1]}")
+            else:
+                print(f"Could not geocode {row['Name']!r} ({row['Address']!r}) - add Latitude/Longitude manually.")
+
+    if updated:
+        with open(file_path, mode='w', encoding='utf-8', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
 
 def get_matrix(coordinates, type="distance"): # duration or distance
     # Convert coordinates to OSRM API format
@@ -33,22 +80,27 @@ def write_matrix_to_csv(matrix, addresses, file_path):
         for address, row in zip(addresses, matrix):
             writer.writerow([address] + row)
 
-def main():
-    input_file_path = 'generator_clients.csv'
+def build_matrices(input_file_path='generator_clients.csv', output_dir='.'):
+    """Geocode any missing coordinates, then rebuild distance_matrix.csv and duration_matrix.csv."""
+    # Fill in any missing Latitude/Longitude by geocoding the Address
+    fill_missing_coordinates(input_file_path)
 
     # Read coordinates and addresses from the CSV file
     coordinates, addresses = read_csv(input_file_path)
 
     for type in ["distance", "duration"]:
-        output_file_path = f'{type}_matrix.csv'
-        
+        output_file_path = os.path.join(output_dir, f'{type}_matrix.csv')
+
         # Get the matrix
         matrix = get_matrix(coordinates, type=type)
-        
+
         # Write the matrix to a CSV file
         write_matrix_to_csv(matrix, addresses, output_file_path)
 
+
+def main():
+    build_matrices()
     print("Finished")
-    
+
 if __name__ == "__main__":
     main()
