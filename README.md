@@ -1,6 +1,9 @@
 # Generator-Maintenance-Routing
 A simple CLI tool to route a technician between many customers efficiently, with Google Calendar and OneStep integration
 
+## GUI
+Double-click `Generator Maintenance Tool.bat` (or run `python gui_app.py`) for a single window with both "Manage Clients" and "Generate Route" tabs - no terminal typing required. It's a thin wrapper around the same logic the CLI scripts below use, so behavior (geocoding, matrix rebuilding, TSP solving, Google Calendar events) is identical either way. The original `.bat` files and CLI scripts still work unchanged if you prefer the terminal.
+
 ## CSV Files
 generator_clients.csv
 | Name       | Phone          | Address                           | Plan | Size | Type       | Model    | Serial     | Latitude           | Longitude          |
