@@ -16,11 +16,13 @@ from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
 clients_file = "generator_clients.csv"
 
-with open("calendar_id.txt") as file:
-    google_calendar_id = file.read().splitlines()[0]
-
 username = os.getenv("USERNAME")
 clear_screen = True
+
+# Route always starts and ends at Home
+start = "Home"
+end = "Home"
+
 
 def format_number(value):
     if isinstance(value, float):
@@ -30,27 +32,19 @@ def format_number(value):
     else:
         return value
 
-# Loop until valid input is received
-while True:
-    matrix_type = input("Optimize for:\n1. Distance\n2. Duration\nEnter your choice (1 or 2): ")
-    if matrix_type == "1":
-        matrix_file = "distance_matrix.csv"
-        break
-    elif matrix_type == "2":
-        matrix_file = "duration_matrix.csv"
-        break
-    else:
-        print("Invalid choice. Please enter '1' for Distance or '2' for Duration.")
 
-if clear_screen:
-    os.system('cls')
+def get_calendar_id(path="calendar_id.txt"):
+    with open(path) as file:
+        return file.read().splitlines()[0]
 
-# Route always starts and ends at Home
-start = "Home"
-end = "Home"
 
-clients = pd.read_csv(clients_file)
-matrix = pd.read_csv(matrix_file, index_col="From/To")
+def load_clients(path=clients_file):
+    return pd.read_csv(path)
+
+
+def load_matrix(matrix_type, output_dir="."):
+    matrix_file = "distance_matrix.csv" if matrix_type == "distance" else "duration_matrix.csv"
+    return pd.read_csv(os.path.join(output_dir, matrix_file), index_col="From/To")
 
 
 def calculate_total_distance(path, matrix):
@@ -242,16 +236,14 @@ def make_url(origin, end, addresses, latitude, longitude, length):
     formatted_addresses = [format_address(address) for address in addresses]
     return shorten_url(origin, end, formatted_addresses, latitude, longitude, length)
 
-def decode_url(origin, end, url, clients, selected_clients, latitude, longitude, length, return_link=False):
-    print()
+def decode_url(origin, end, url, clients, selected_clients, latitude, longitude, length):
+    """Returns (summary_text, shortened_url). Mutates selected_clients in place,
+    reordering entries to match the TSP visit order encoded in url."""
     output = ''
 
     # Extract addresses from URL, excluding the Home start/end point and the @lat,lon,zoom suffix
     addresses = url.split('/')[6:-2]
     shortened_url = shorten_url(origin, end, addresses, latitude, longitude, length)
-
-    if return_link:
-        return shortened_url
 
     for i in range(len(addresses)):
         addresses[i] = unformat_address(addresses[i])
@@ -262,16 +254,13 @@ def decode_url(origin, end, url, clients, selected_clients, latitude, longitude,
         if matched_clients:
             client = matched_clients[0]
             selected_clients[i-1] = client
-            print(f"{i}. {client['Name']} ({client['Plan']})")
             output += f"{i}. {client['Name']} ({client['Plan']})\n"
         else:
-            print(f"{i}. Address not found in client list.")
             output += f"{i}. Address not found in client list.\n"
 
-    print(f"\nlink: {shortened_url}")
     output += f"\nlink: {shortened_url}"
 
-    return output
+    return output, shortened_url
 
 
 # Create submatrix for selected addresses
@@ -312,69 +301,152 @@ def to_polar_vector(p, q):
 
 ALGORITHM = "two_opt" # Options: "ortools", "two_opt", "nearest_neighbor"
 
+WEEKDAY_OFFSETS = [MO, TU, WE, TH, FR, SA, SU]
+
+
+def resolve_weekday(choice_index):
+    """choice_index: 1=Monday .. 7=Sunday. Returns the next occurrence as a beautiful_date D."""
+    return D.today() + WEEKDAY_OFFSETS[choice_index - 1]
+
+
+def get_calendar(calendar_id):
+    try:
+        return GoogleCalendar(calendar_id)
+    except Exception:
+        os.remove(f"C:\\Users\\{username}\\.credentials\\token.pickle")
+        return GoogleCalendar(calendar_id)
+
+
+def build_route(clients, matrix, selected_clients, matrix_type="distance",
+                 algorithm=ALGORITHM, start_name=start, end_name=end):
+    """Computes the TSP-optimized route for selected_clients. Returns a dict:
+    tsp_path, ordered_clients, summary_text, google_maps_url, google_maps_short_link,
+    eta_lower, eta_upper (the last two are None unless matrix_type == "distance")."""
+    selected_addresses = [client['Address'] for client in selected_clients]
+
+    start_address = clients[clients['Name'] == start_name]['Address'].iloc[0]
+    end_address = clients[clients['Name'] == end_name]['Address'].iloc[0]
+    formatted_start_address = format_address(start_address)
+    formatted_end_address = format_address(end_address)
+
+    full_addresses = [start_address] + selected_addresses + [end_address]
+
+    sub_matrix = make_sub_matrix(matrix, full_addresses)
+
+    if algorithm == "ortools":
+        tsp_path = solve_tsp_ortools(sub_matrix)
+    elif algorithm == "two_opt":
+        tsp_path = solve_tsp_two_opt(sub_matrix)
+    elif algorithm == "nearest_neighbor":
+        tsp_path = solve_tsp_nearest_neighbor(sub_matrix)
+    else:
+        raise ValueError("Invalid algorithm selection")
+
+    eta_lower = eta_upper = None
+    if matrix_type == "distance":
+        distance = calculate_total_distance(tsp_path, sub_matrix)
+        # Based on emperical data
+        estimated_time = distance*0.00103989801767 + 21.5290060028
+        standard_deviation = 9.98231810177 # for future use; n=19
+        stops = len(selected_clients)
+        eta_upper = (estimated_time + standard_deviation) / (stops + 1)
+        eta_lower = (estimated_time - standard_deviation) / (stops + 1)
+
+    lon, lat = mean_coordinates(selected_clients)
+    longest_distance = greatest_distance(selected_clients, scaled_down=True)
+
+    # tsp_path's first/last entries are the fixed start/end addresses; make_url
+    # adds those separately, so only the addresses in between belong here.
+    tsp_addresses = [unformat_address(addr) for addr in tsp_path[1:-1]]
+    google_maps_url = make_url(formatted_start_address, formatted_end_address, tsp_addresses, lat, lon, longest_distance)
+
+    # Decode the URL to reorder ordered_clients into the TSP visit order
+    ordered_clients = list(selected_clients)
+    summary_text, short_link = decode_url(
+        formatted_start_address, formatted_end_address, google_maps_url,
+        clients, ordered_clients, lat, lon, longest_distance)
+
+    return {
+        "tsp_path": tsp_path,
+        "ordered_clients": ordered_clients,
+        "summary_text": summary_text,
+        "google_maps_url": google_maps_url,
+        "google_maps_short_link": short_link,
+        "eta_lower": eta_lower,
+        "eta_upper": eta_upper,
+    }
+
+
+def create_calendar_events(ordered_clients, google_maps_link, selected_day, calendar_id):
+    calendar = get_calendar(calendar_id)
+
+    start_time = selected_day[7:00]
+    time_increment = 1 * hours
+    if len(ordered_clients) > 8:
+        time_increment = 0.5 * hours
+
+    for client in ordered_clients:
+        event = Event(
+            f"{client['Name']} ({client['Plan']})".replace(' (no)', ''),
+            start=start_time,
+            end=start_time + time_increment,
+            location=client['Address'],
+            description=inspect.cleandoc(f"""
+            Phone: {client['Phone']}
+            Generator: {client['Size']} {client['Type']}
+            Model: {format_number(client['Model'])}
+            Serial: {format_number(client['Serial'])}"""
+            .replace("nan", ""))
+        )
+
+        calendar.add_event(event)
+        start_time += time_increment
+
+    # add route url to calendar
+    event = Event(
+            "Generator Route",
+            start=selected_day,
+            description=f'<a href="{google_maps_link}">Google Maps Route</a>'
+    )
+    calendar.add_event(event)
+
 
 def main():
+    # Loop until valid input is received
+    while True:
+        choice = input("Optimize for:\n1. Distance\n2. Duration\nEnter your choice (1 or 2): ")
+        if choice == "1":
+            matrix_type = "distance"
+            break
+        elif choice == "2":
+            matrix_type = "duration"
+            break
+        else:
+            print("Invalid choice. Please enter '1' for Distance or '2' for Duration.")
+
+    if clear_screen:
+        os.system('cls')
+
+    clients = load_clients()
+    matrix = load_matrix(matrix_type)
+
     # Group clients by plan, excluding those with NaN plans
     grouped_clients = group_clients_by_plan(clients)
 
     # Prompt the user for client selection by plan
     selected_clients = select_clients(grouped_clients, select_platinum=False)
 
-    # Extract addresses from selected clients
-    selected_addresses = [client['Address'] for client in selected_clients]
-
-    # Directly add the start address to the selected addresses
-    start_address = clients[clients['Name'] == start]['Address'].iloc[0]
-    end_address = clients[clients['Name'] == end]['Address'].iloc[0]
-    formatted_start_address = format_address(start_address)
-    formatted_end_address = format_address(end_address)
-
-    selected_addresses.insert(0, start_address)
-    selected_addresses.append(end_address)
-
-    # Generate submatrix for selected addresses
-    sub_matrix = make_sub_matrix(matrix, selected_addresses)
-
-    if ALGORITHM == "ortools":
-        tsp_path = solve_tsp_ortools(sub_matrix)
-    elif ALGORITHM == "two_opt":
-        tsp_path = solve_tsp_two_opt(sub_matrix)
-    elif ALGORITHM == "nearest_neighbor":
-        tsp_path = solve_tsp_nearest_neighbor(sub_matrix)
-    else:
-        raise ValueError("Invalid algorithm selection")
+    route = build_route(clients, matrix, selected_clients, matrix_type=matrix_type)
 
     if clear_screen:
         os.system('cls')
 
-    # Calculate and print stats of the path
-    if matrix_type == "1":
-        distance = calculate_total_distance(tsp_path, sub_matrix)
-        # Based on emperical data
-        estimated_time = distance*0.00103989801767 + 21.5290060028
-        standard_deviation = 9.98231810177 # for future use; n=19
-        upper_limit = estimated_time + 1*standard_deviation
-        lower_limit = estimated_time - 1*standard_deviation
-
-        stops = len(selected_clients)
-        upper_limit /= (stops + 1)
-        lower_limit /= (stops + 1)
-
+    if route["eta_lower"] is not None:
         print("Efficiency of route:")
-        print(f"Estimated drive time per stop: {lower_limit:.0f}-{upper_limit:.0f} minutes")
+        print(f"Estimated drive time per stop: {route['eta_lower']:.0f}-{route['eta_upper']:.0f} minutes")
 
-    # view location
-    lon, lat = mean_coordinates(selected_clients)
-    longest_distance = greatest_distance(selected_clients, scaled_down=True)
-    # print(f"{longest_distance=}")
-    
-    # Generate and print the Google Maps URL for the TSP path
-    tsp_addresses = [unformat_address(addr) for addr in tsp_path]  # Unformat addresses for URL
-    google_maps_url = make_url(formatted_start_address, formatted_end_address, tsp_addresses, lat, lon, longest_distance)
-    # print("Google Maps URL for TSP path:", google_maps_url)
-    
-    # Decode the URL to show the client details in the TSP order
-    decode_url(formatted_start_address, formatted_end_address, google_maps_url, clients, selected_clients, lat, lon, longest_distance, return_link=False)
+    print()
+    print(route["summary_text"])
 
     # Calendar implementation
     verified_macs = [
@@ -404,72 +476,20 @@ def main():
             print("Please enter 'yes' or 'no'.")
 
     if add_to_calendar:
-        # Team MR Gen tech Calendar
-        try:
-            calendar = GoogleCalendar(google_calendar_id)
-        except Exception as e:
-            os.remove(f"C:\\Users\\{username}\\.credentials\\token.pickle")
-            calendar = GoogleCalendar(google_calendar_id)
-
         # Next specified day
         weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         for index, day in enumerate(weekdays, 1):
             print(f"{index}: {day}")
         while True:
-            selected_day = input("Select day: ")
-            if selected_day == "1":
-                selected_day = D.today() + MO
-                break
-            if selected_day == "2":
-                selected_day = D.today() + TU
-                break
-            if selected_day == "3":
-                selected_day = D.today() + WE
-                break
-            if selected_day == "4":
-                selected_day = D.today() + TH
-                break
-            if selected_day == "5":
-                selected_day = D.today() + FR
-                break
-            if selected_day == "6":
-                selected_day = D.today() + SA
-                break
-            if selected_day == "7":
-                selected_day = D.today() + SU
+            selected_day_choice = input("Select day: ")
+            if selected_day_choice in {"1", "2", "3", "4", "5", "6", "7"}:
                 break
             print("Invalid input")
 
-        start_time = selected_day[7:00]
-        time_increment = 1 * hours
+        selected_day = resolve_weekday(int(selected_day_choice))
 
-        if len(selected_clients) > 8:
-            time_increment = 0.5 * hours
-        for client in selected_clients:
-            event = Event(
-                f"{client['Name']} ({client['Plan']})".replace(' (no)', ''),
-                start=start_time,
-                end=start_time + time_increment,
-                location=client['Address'],
-                description=inspect.cleandoc(f"""
-                Phone: {client['Phone']}
-                Generator: {client['Size']} {client['Type']}
-                Model: {format_number(client['Model'])}
-                Serial: {format_number(client['Serial'])}"""
-                .replace("nan", ""))
-            )
-
-            calendar.add_event(event)
-            start_time += time_increment
-
-        # add route url to calendar
-        link = decode_url(formatted_start_address, formatted_end_address, google_maps_url, clients, selected_clients, lat, lon, longest_distance, True)
-        event = Event(
-                "Generator Route",
-                start=selected_day,
-                description=f'<a href="{link}">Google Maps Route</a>'
-        )
-        calendar.add_event(event)
+        create_calendar_events(route["ordered_clients"], route["google_maps_short_link"],
+                                selected_day, get_calendar_id())
 
 
 if __name__ == "__main__":

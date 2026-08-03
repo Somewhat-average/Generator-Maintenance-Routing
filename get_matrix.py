@@ -48,7 +48,7 @@ def fill_missing_coordinates(file_path):
             writer.writerows(rows)
 
 
-def get_matrix(coordinates, type="distance"): # duration or distance
+def get_matrix(coordinates, type="distance", timeout=15): # duration or distance
     # Convert coordinates to OSRM API format
     coordinates_str = ';'.join([f"{lon},{lat}" for lon, lat in coordinates])
 
@@ -56,7 +56,7 @@ def get_matrix(coordinates, type="distance"): # duration or distance
     url = f"http://router.project-osrm.org/table/v1/driving/{coordinates_str}?annotations={type}"
 
     # Make the request to OSRM
-    response = requests.get(url)
+    response = requests.get(url, timeout=timeout)
     data = response.json()
 
     # Extract the distance matrix
@@ -80,7 +80,7 @@ def write_matrix_to_csv(matrix, addresses, file_path):
         for address, row in zip(addresses, matrix):
             writer.writerow([address] + row)
 
-def build_matrices(input_file_path='generator_clients.csv', output_dir='.'):
+def build_matrices(input_file_path='generator_clients.csv', output_dir='.', timeout=15):
     """Geocode any missing coordinates, then rebuild distance_matrix.csv and duration_matrix.csv."""
     # Fill in any missing Latitude/Longitude by geocoding the Address
     fill_missing_coordinates(input_file_path)
@@ -92,7 +92,7 @@ def build_matrices(input_file_path='generator_clients.csv', output_dir='.'):
         output_file_path = os.path.join(output_dir, f'{type}_matrix.csv')
 
         # Get the matrix
-        matrix = get_matrix(coordinates, type=type)
+        matrix = get_matrix(coordinates, type=type, timeout=timeout)
 
         # Write the matrix to a CSV file
         write_matrix_to_csv(matrix, addresses, output_file_path)
