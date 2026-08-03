@@ -8,6 +8,35 @@ EDITABLE_FIELDS = ["Phone", "Address", "Plan", "Size", "Type", "Model", "Serial"
 # Home is used as the fixed route start/end point elsewhere in the codebase.
 PROTECTED_NAMES = {"Home"}
 
+# Contract tiers, in the order the CSV should be grouped by.
+VALID_PLANS = ("Platinum", "Gold", "Silver", "no")
+PLAN_ORDER = {plan: i for i, plan in enumerate(VALID_PLANS)}
+
+
+def normalize_plan(value):
+    """Validate a plan against VALID_PLANS, title-cased except for 'no'."""
+    value = value.strip()
+    if not value:
+        return None
+    if value.lower() == "no":
+        return "no"
+    titled = value.title()
+    return titled if titled in VALID_PLANS[:-1] else None
+
+
+def prompt_plan(current=""):
+    while True:
+        value = prompt(f"Plan ({', '.join(VALID_PLANS)})", current)
+        normalized = normalize_plan(value)
+        if normalized:
+            return normalized
+        print(f"  Plan must be one of: {', '.join(VALID_PLANS)}")
+
+
+def plan_sort_key(row):
+    plan = (row.get('Plan') or '').strip()
+    return (PLAN_ORDER.get(plan, len(PLAN_ORDER)), row.get('Name', '').strip().lower())
+
 
 def load_clients():
     with open(CLIENTS_FILE, newline='', encoding='utf-8') as f:
@@ -16,6 +45,7 @@ def load_clients():
 
 
 def save_clients(fieldnames, rows):
+    rows.sort(key=plan_sort_key)
     with open(CLIENTS_FILE, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -108,7 +138,7 @@ def add_client(fieldnames, rows):
     row['Name'] = name
     row['Phone'] = prompt("Phone")
     row['Address'] = prompt("Address")
-    row['Plan'] = prompt("Plan (e.g. Platinum, Gold, Silver)")
+    row['Plan'] = prompt_plan()
     row['Size'] = prompt("Generator size")
     row['Type'] = prompt("Generator type")
     row['Model'] = prompt("Model")
@@ -149,7 +179,10 @@ def edit_client(fieldnames, rows):
 
     old_address = row['Address']
     for field in EDITABLE_FIELDS:
-        row[field] = prompt(field, row.get(field, ''))
+        if field == "Plan":
+            row[field] = prompt_plan(row.get(field, ''))
+        else:
+            row[field] = prompt(field, row.get(field, ''))
 
     if row['Address'] != old_address:
         row['Latitude'], row['Longitude'] = geocode_with_feedback(row['Address'])
