@@ -7,6 +7,7 @@ import main
 from gui.threading_utils import run_in_background
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MAX_ROWS_PER_COLUMN = 10
 
 
 class RouteTab(ttk.Frame):
@@ -87,12 +88,18 @@ class RouteTab(ttk.Frame):
             tier_clients = grouped.get(plan)
             if not tier_clients:
                 continue
-            tier_frame = ttk.Labelframe(self.checkbox_frame, text=f"{plan} plan", padding=4)
-            tier_frame.pack(side="left", fill="y", padx=4, anchor="n")
-            for client in tier_clients:
-                var = tk.BooleanVar(value=(plan == "Platinum"))
-                ttk.Checkbutton(tier_frame, text=client['Name'], variable=var).pack(anchor="w")
-                self.client_vars.append((client, var))
+            # Split into multiple columns once a tier has more than
+            # MAX_ROWS_PER_COLUMN clients, instead of one long scroll.
+            chunks = [tier_clients[i:i + MAX_ROWS_PER_COLUMN]
+                      for i in range(0, len(tier_clients), MAX_ROWS_PER_COLUMN)]
+            for chunk_index, chunk in enumerate(chunks):
+                title = f"{plan} plan" if chunk_index == 0 else f"{plan} plan (cont.)"
+                tier_frame = ttk.Labelframe(self.checkbox_frame, text=title, padding=4)
+                tier_frame.pack(side="left", fill="y", padx=4, anchor="n")
+                for client in chunk:
+                    var = tk.BooleanVar(value=(plan == "Platinum"))
+                    ttk.Checkbutton(tier_frame, text=client['Name'], variable=var).pack(anchor="w")
+                    self.client_vars.append((client, var))
 
     def _selected_clients(self):
         return [client for client, var in self.client_vars if var.get()]
