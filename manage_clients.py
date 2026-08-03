@@ -242,6 +242,7 @@ def main():
         elif choice == "4":
             remove_client(fieldnames, rows)
         elif choice == "5":
+            save_clients(fieldnames, rows)
             print("Goodbye.")
             break
         else:
