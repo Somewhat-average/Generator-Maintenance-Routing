@@ -7,4 +7,11 @@ generator_clients.csv
 | ---------- | -------------- | --------------------------------- | ---- | ---- | ---------- | -------- | ---------- | ------------------ | ------------------ |
 | John Smith | (111) 222-3333 | 1234 NE Brick Rd, Tampa, FL 33613 | Gold | 24kW | Air Cooled | G0072099 | 1111111111 | 28.062757985228004 | -82.41318894541786 |
 
+## Managing Clients
+Double-click `Manage Clients.bat` (or run `python manage_clients.py`) to add, edit, or remove clients through a simple menu - no need to edit `generator_clients.csv` by hand.
+
+- **Coordinates are automatic.** When you add a client or change an address, the tool looks up its Latitude/Longitude for you (via the free US Census geocoder). You only get asked for coordinates if that lookup fails - in that case, right-click the address in Google Maps, click the lat/long shown at the top of the menu to copy it, then paste it in when prompted.
+- **The routing matrices stay in sync.** Every add, edit, or removal automatically rebuilds `distance_matrix.csv` and `duration_matrix.csv`, so `Generator Route.bat` always has up-to-date data. (If that step fails, e.g. no internet connection, run `get_matrix.py` manually once you're back online.)
+- **`Work` and `Home`** are reserved names used as the route's fixed start/end points - the tool will warn you before letting you rename or remove either one.
+
 
