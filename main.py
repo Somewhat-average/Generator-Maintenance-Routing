@@ -246,9 +246,8 @@ def decode_url(origin, end, url, clients, selected_clients, latitude, longitude,
     print()
     output = ''
 
-    # Extract addresses from URL and remove the first and last item (the Home start/end point)
+    # Extract addresses from URL, excluding the Home start/end point and the @lat,lon,zoom suffix
     addresses = url.split('/')[6:-2]
-    addresses = addresses[1:-1]  # remove first and last address
     shortened_url = shorten_url(origin, end, addresses, latitude, longitude, length)
 
     if return_link:
